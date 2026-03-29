@@ -378,26 +378,201 @@ vector<Warrior*> redWarrior;
 vector<Warrior*> blueWarrior;
 vector<BattleMatch> battleList;
 vector<Move> moveList;
+int m,n,k,t,strength[5],attack[5];
+Headquarter Red("red",m,order_of_red,strength,attack,n);
+Headquarter Blue("blue",m,order_of_blue,strength,attack,n);
+
+void CaseInitialize(){
+	for(auto& p:redWarrior) if(p) delete p;
+	for(auto& p:blueWarrior) if(p) delete p;
+	redWarrior.clear();
+	blueWarrior.clear(); 
+		
+	cin>>m>>n>>k>>t;//n-cities;k-loyalty decrease;t-final timestamp
+	for(int i=0;i<5;i++) cin>>strength[i];
+	for(int i=0;i<5;i++) cin>>attack[i];
+	
+	Headquarter Newred("red",m,order_of_red,strength,attack,n);
+	Headquarter Newblue("blue",m,order_of_blue,strength,attack,n);
+	Red=Newred,Blue=Newblue;
+	war_over=false;
+} 
+
+void ProduceWarriors(Headquarter& a,Headquarter& b,int time){
+	if(!Red.getStop()){
+		bool stop;
+		Warrior* temp=Red.makeWarrior(stop);
+		if(temp){
+			redWarrior.push_back(temp);
+			temp->born(time);
+		}
+	}
+	if(!Blue.getStop()){
+		bool stop;
+		Warrior* temp=Blue.makeWarrior(stop);
+		if(temp){
+			blueWarrior.push_back(temp);
+			temp->born(time);
+		}
+	}
+}
+
+void LionEscape(Headquarter& a,Headquarter& b,int time){
+	auto it=redWarrior.begin();
+	while(it!=redWarrior.end()){
+		Warrior* p=*it;
+		if(p&&p->type==3&&p->alive&&p->runAway()&&p->position!=n+1){
+			printf("%03d:%02d red lion %d ran away\n",time/60,time%60,p->id);
+			delete p;
+			it=redWarrior.erase(it);
+		}else ++it;
+	}
+	it=blueWarrior.begin();
+	while(it!=blueWarrior.end()){
+		Warrior* p=*it;
+		if(p&&p->type==3&&p->alive&&p->runAway()&&p->position!=0){
+			printf("%03d:%02d blue lion %d ran away\n",time/60,time%60,p->id);
+			delete p;
+			it=blueWarrior.erase(it);
+		}else ++it;
+	}
+}
+
+void WarriorsMove(Headquarter& a,Headquarter& b,int time){
+	for(auto& p:redWarrior){
+		if(p){
+			p->move(1,k);
+			if(p->remainLifeElement<=0) p->alive=false;
+			moveList.push_back(Move(p->color,p->type,p->id,p->position,p->remainLifeElement,p->attack));
+		}
+	}
+	for(auto& p:blueWarrior){
+		if(p){
+			p->move(1,k);
+			if(p->remainLifeElement<=0) p->alive=false;
+			moveList.push_back(Move(p->color,p->type,p->id,p->position,p->remainLifeElement,p->attack));
+		}
+	}
+				
+	sort(moveList.begin(),moveList.end(),[](Move a,Move b){
+		if(a.position==b.position){
+			return a.color>b.color;
+		}else return a.position<b.position;
+	});
+				
+	for(auto& p:moveList){
+		if(p.position>=1&&p.position<=n){
+			printf("%03d:%02d %s %s %d marched to city %d with %d elements and force %d\n",time/60,time%60,p.color.c_str(),warrior_names[p.type].c_str(),p.id,p.position,p.remainLifeElement,p.attack);
+		}else{
+			const char* head=(p.position==0)?"red":"blue";
+			printf("%03d:%02d %s %s %d reached %s headquarter with %d elements and force %d\n",time/60,time%60,p.color.c_str(),warrior_names[p.type].c_str(),p.id,head,p.remainLifeElement,p.attack);
+			Warrior* w=NULL;
+			if(p.color=="red"){
+				for(auto* ww:redWarrior)
+					if(ww->id==p.id&&ww->type==p.type){w=ww;break;}
+			}else{
+				for(auto* ww:blueWarrior)
+					if(ww->id==p.id&&ww->type==p.type){w=ww;break;}
+			}
+			if(w&&w->alive){
+				printf("%03d:%02d %s headquarter was taken\n",time/60,time%60,head);
+				war_over=true;
+			}
+		}
+	}
+				
+	auto remove_dead=[](vector<Warrior*>& warriors){
+		auto it=warriors.begin();
+		while(it!=warriors.end()){
+			Warrior* w=*it;
+			if(!w->alive){
+				delete w;
+				it=warriors.erase(it);
+			}else ++it;
+		}
+	};
+	remove_dead(redWarrior);
+	remove_dead(blueWarrior);
+}
+
+void WolfStealWeapon(Headquarter& a,Headquarter& b,int time){
+	vector<Warrior*> temp;
+	for(auto p:redWarrior) if(p->type==4) temp.push_back(p);
+	for(auto p:blueWarrior) if(p->type==4) temp.push_back(p);
+	sort(temp.begin(),temp.end(),[](Warrior* a,Warrior* b){
+		if(a->position==b->position){
+			return a->color>b->color;
+		}else return a->position<b->position;
+	});
+				
+	for(auto p:temp){
+		if(p->color=="red"){
+			for(auto pp:blueWarrior)
+				p->stealWeapon(pp,time);
+		}else{
+			for(auto pp:redWarrior)
+				p->stealWeapon(pp,time);
+		}
+	}
+}
+
+void WarriorsBattle(Headquarter& a,Headquarter& b,int time){
+	sort(redWarrior.begin(),redWarrior.end(),[](Warrior* a,Warrior* b){return a->position<b->position;});
+	for(auto p:redWarrior){
+		int city=p->position;
+		for(auto pp:blueWarrior){
+			if(pp->position==city&&city>=1&&city<=n){
+				battleList.push_back(BattleMatch(p,pp));
+				break;
+			}
+		}
+	}
+				
+	for(auto p:battleList) p.Battle(time);
+				
+	auto p1=redWarrior.begin();
+	while(p1!=redWarrior.end()){
+		Warrior* temp=*p1;
+		if(temp->alive==false){
+			delete temp; 
+			p1=redWarrior.erase(p1);
+		}
+		else ++p1;
+	}
+	auto p2=blueWarrior.begin();
+	while(p2!=blueWarrior.end()){
+		Warrior* temp=*p2;
+		if(temp->alive==false){
+			delete temp;
+			p2=blueWarrior.erase(p2);
+		}
+		else ++p2;
+	}
+}
+
+void ReportLifeElements(Headquarter& a,Headquarter& b,int time){
+	printf("%03d:%02d %d elements in red headquarter\n",time/60,time%60,Red.getLifeElements());
+	printf("%03d:%02d %d elements in blue headquarter\n",time/60,time%60,Blue.getLifeElements());
+}
+
+void WarriorsReportCondition(Headquarter& a,Headquarter& b,int time){
+	vector<Warrior*> temp;
+	for(auto p:redWarrior) temp.push_back(p);
+	for(auto p:blueWarrior) temp.push_back(p);
+	sort(temp.begin(),temp.end(),[](Warrior* a,Warrior* b){
+		if(a->position==b->position){
+			return a->color>b->color;
+		}else return a->position<b->position;
+	});
+				
+	for(auto p:temp) p->reportCondition(time);
+}
 
 int main(){
 	int T;
 	cin>>T;
 	for(int Case=1;Case<=T;Case++){
-		for(auto& p:redWarrior) if(p) delete p;
-		for(auto& p:blueWarrior) if(p) delete p;
-		redWarrior.clear();
-		blueWarrior.clear(); 
-		
-		int m,n,k,t;
-		cin>>m>>n>>k>>t;//n-cities;k-loyalty decrease;t-final timestamp
-		int strength[5];
-		int attack[5];
-		war_over=false;
-		for(int i=0;i<5;i++) cin>>strength[i];
-		for(int i=0;i<5;i++) cin>>attack[i];
-		
-		Headquarter Red("red",m,order_of_red,strength,attack,n);
-		Headquarter Blue("blue",m,order_of_blue,strength,attack,n);
+		CaseInitialize();
 		printf("Case %d:\n",Case);
 		
 		for(int time=0;!war_over&&time<=t;time++){
@@ -405,161 +580,19 @@ int main(){
 			battleList.clear();
 			
 			if(time%60==0){
-				if(!Red.getStop()){
-					bool stop;
-					Warrior* temp=Red.makeWarrior(stop);
-					if(temp){
-						redWarrior.push_back(temp);
-						temp->born(time);
-					}
-				}
-				if(!Blue.getStop()){
-					bool stop;
-					Warrior* temp=Blue.makeWarrior(stop);
-					if(temp){
-						blueWarrior.push_back(temp);
-						temp->born(time);
-					}
-				}
+				ProduceWarriors(Red,Blue,time);
 			}else if(time%60==5){
-				auto it=redWarrior.begin();
-				while(it!=redWarrior.end()){
-					Warrior* p=*it;
-					if(p&&p->type==3&&p->alive&&p->runAway()&&p->position!=n+1){
-						printf("%03d:%02d red lion %d ran away\n",time/60,time%60,p->id);
-						delete p;
-						it=redWarrior.erase(it);
-					}else ++it;
-				}
-				it=blueWarrior.begin();
-				while(it!=blueWarrior.end()){
-					Warrior* p=*it;
-					if(p&&p->type==3&&p->alive&&p->runAway()&&p->position!=0){
-						printf("%03d:%02d blue lion %d ran away\n",time/60,time%60,p->id);
-						delete p;
-						it=blueWarrior.erase(it);
-					}else ++it;
-				}
+				LionEscape(Red,Blue,time);
 			}else if(time%60==10){
-				for(auto& p:redWarrior){
-					if(p){
-						p->move(1,k);
-						if(p->remainLifeElement<=0) p->alive=false;
-						moveList.push_back(Move(p->color,p->type,p->id,p->position,p->remainLifeElement,p->attack));
-					}
-				}
-				for(auto& p:blueWarrior){
-					if(p){
-						p->move(1,k);
-						if(p->remainLifeElement<=0) p->alive=false;
-						moveList.push_back(Move(p->color,p->type,p->id,p->position,p->remainLifeElement,p->attack));
-					}
-				}
-				
-				sort(moveList.begin(),moveList.end(),[](Move a,Move b){
-					if(a.position==b.position){
-						return a.color>b.color;
-					}else return a.position<b.position;
-				});
-				
-				for(auto& p:moveList){
-					if(p.position>=1&&p.position<=n){
-						printf("%03d:%02d %s %s %d marched to city %d with %d elements and force %d\n",time/60,time%60,p.color.c_str(),warrior_names[p.type].c_str(),p.id,p.position,p.remainLifeElement,p.attack);
-					}else{
-						const char* head=(p.position==0)?"red":"blue";
-						printf("%03d:%02d %s %s %d reached %s headquarter with %d elements and force %d\n",time/60,time%60,p.color.c_str(),warrior_names[p.type].c_str(),p.id,head,p.remainLifeElement,p.attack);
-						Warrior* w=NULL;
-						if(p.color=="red"){
-							for(auto* ww:redWarrior)
-								if(ww->id==p.id&&ww->type==p.type){w=ww;break;}
-						}else{
-							for(auto* ww:blueWarrior)
-								if(ww->id==p.id&&ww->type==p.type){w=ww;break;}
-						}
-						if(w&&w->alive){
-							printf("%03d:%02d %s headquarter was taken\n",time/60,time%60,head);
-							war_over=true;
-						}
-					}
-				}
-				
-				auto remove_dead=[](vector<Warrior*>& warriors){
-					auto it=warriors.begin();
-					while(it!=warriors.end()){
-						Warrior* w=*it;
-						if(!w->alive){
-							delete w;
-							it=warriors.erase(it);
-						}else ++it;
-					}
-				};
-				remove_dead(redWarrior);
-				remove_dead(blueWarrior);
+				WarriorsMove(Red,Blue,time);
 			}else if(time%60==35){
-				vector<Warrior*> temp;
-				for(auto p:redWarrior) if(p->type==4) temp.push_back(p);
-				for(auto p:blueWarrior) if(p->type==4) temp.push_back(p);
-				sort(temp.begin(),temp.end(),[](Warrior* a,Warrior* b){
-					if(a->position==b->position){
-						return a->color>b->color;
-					}else return a->position<b->position;
-				});
-				
-				for(auto p:temp){
-					if(p->color=="red"){
-						for(auto pp:blueWarrior)
-							p->stealWeapon(pp,time);
-					}else{
-						for(auto pp:redWarrior)
-							p->stealWeapon(pp,time);
-					}
-				}
+				WolfStealWeapon(Red,Blue,time);
 			}else if(time%60==40){
-				sort(redWarrior.begin(),redWarrior.end(),[](Warrior* a,Warrior* b){return a->position<b->position;});
-				for(auto p:redWarrior){
-					int city=p->position;
-					for(auto pp:blueWarrior){
-						if(pp->position==city&&city>=1&&city<=n){
-							battleList.push_back(BattleMatch(p,pp));
-							break;
-						}
-					}
-				}
-				
-				for(auto p:battleList) p.Battle(time);
-				
-				auto p1=redWarrior.begin();
-				while(p1!=redWarrior.end()){
-					Warrior* temp=*p1;
-					if(temp->alive==false){
-						delete temp; 
-						p1=redWarrior.erase(p1);
-					}
-					else ++p1;
-				}
-				auto p2=blueWarrior.begin();
-				while(p2!=blueWarrior.end()){
-					Warrior* temp=*p2;
-					if(temp->alive==false){
-						delete temp;
-						p2=blueWarrior.erase(p2);
-					}
-					else ++p2;
-				}
+				WarriorsBattle(Red,Blue,time);
 			}else if(time%60==50){
-				printf("%03d:%02d %d elements in red headquarter\n",time/60,time%60,Red.getLifeElements());
-				printf("%03d:%02d %d elements in blue headquarter\n",time/60,time%60,Blue.getLifeElements());
+				ReportLifeElements(Red,Blue,time);
 			}else if(time%60==55){
-				vector<Warrior*> temp;
-				for(auto p:redWarrior) temp.push_back(p);
-				for(auto p:blueWarrior) temp.push_back(p);
-				sort(temp.begin(),temp.end(),[](Warrior* a,Warrior* b){
-					if(a->position==b->position){
-						return a->color>b->color;
-					}else return a->position<b->position;
-				});
-				
-				for(auto p:temp) p->reportCondition(time);
+				WarriorsReportCondition(Red,Blue,time);
 			}
 		}
 	}
