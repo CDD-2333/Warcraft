@@ -2,6 +2,8 @@
 #include <iomanip> 
 #include <string>
 #include <vector>
+#include <cstdio>
+#include <fstream>
 #include <cstring>
 #include <algorithm>
 using namespace std;
@@ -9,9 +11,9 @@ using namespace std;
 #define epsilon 1e-9
 const string warrior_names[5]={"dragon","ninja","iceman","lion","wolf"},weapon_names[3]={"sword","bomb","arrow"};
 const int order_of_red[5]={2,3,4,1,0},order_of_blue[5]={3,0,1,2,4};
-int battleVictory[21][2];//dimension1-citynumber,dimension2-0red,1blue
-int cityFlag[21];//0-none,1-red,2-blue
-int cityAttribute[21];//0/1/2 stands for types of weapons in city battle,to tackle the settlement in 40
+int battleVictory[25][2];//dimension1-citynumber,dimension2-0red,1blue
+int cityFlag[25];//0-none,1-red,2-blue
+int cityAttribute[25];//0/1/2 stands for types of weapons in city battle,to tackle the settlement in 40
 bool war_over=false;
 
 class Weapon{//To store weapons of warriors
@@ -109,13 +111,13 @@ class Dragon:public Warrior{//Derived from Warrior,derived classes below are sim
 				case 1:weaponList.push_back(Weapon(1,1));break;
 				case 2:weaponList.push_back(Weapon(2,3));
 			}
-			cout<<"Its morale is "<<fixed<<setprecision(2)<<morale<<endl;
+			cout<<fixed<<setprecision(2)<<"Its morale is "<<morale<<endl;
 			cout.unsetf(ios::fixed);
-			cout<<setprecision(6);
+			//printf("Its morale is %.2f\n",morale);
 		}
 		
 		void yell(int time){//used when dragon gain a victory
-			if(morale>=0.8) printf("%03d:%02d %s dragon %d yelled in city %d\n",time/60,time%60,color.c_str(),id,position);
+			if(morale>0.8-epsilon) printf("%03d:%02d %s dragon %d yelled in city %d\n",time/60,time%60,color.c_str(),id,position);
 		}
 
 		void changeMorale(double delta){morale+=delta;}
@@ -270,7 +272,7 @@ class Headquarter{
 
 vector<Warrior*> redWarrior;
 vector<Warrior*> blueWarrior;
-int m,n,r,k,t,strength[5],attack[5],cityLifeElement[21];
+int m,n,r,k,t,strength[5],attack[5],cityLifeElement[25];
 Headquarter Red("red",0,order_of_red,strength,attack,0);
 Headquarter Blue("blue",0,order_of_blue,strength,attack,0);//global variables,initialized at the beginning of cases
 
@@ -500,7 +502,6 @@ void WarriorsShootArrow(Headquarter& a,Headquarter& b,int time){
 		while(it!=attacker->weaponList.end()&&it->type!=2) ++it;
 		if(it!=attacker->weaponList.end()){
 			victim->remainLifeElement-=r;
-			victim->pastLifeElement-=r;
 			it->attribute--;
 		}
 	}
@@ -512,9 +513,8 @@ void WarriorsShootArrow(Headquarter& a,Headquarter& b,int time){
 		attacker->sortWeaponsForReport();
 		auto it=attacker->weaponList.begin();
 		while(it!=attacker->weaponList.end()&&it->type!=2) ++it;
-		while(it!=attacker->weaponList.end()&&it->attribute!=0) ++it;
-		if(it!=attacker->weaponList.end()){
-			attacker->weaponList.erase(it);
+		if(it!=attacker->weaponList.end()&&it->attribute==0){
+    		attacker->weaponList.erase(it);
 		}
 
 		if(attacker->color=="red"){
@@ -653,6 +653,8 @@ void WarriorsBattle(Headquarter& a,Headquarter& b,int time){
 			result=defender->color;
 		}
 		if(attacker->isBombDead||defender->isBombDead) continue;
+		attacker->pastLifeElement=attacker->remainLifeElement>0?attacker->remainLifeElement:0;
+		defender->pastLifeElement=defender->remainLifeElement>0?defender->remainLifeElement:0;
 
 		if(!Shotskip){
 			int attackerHarm=attacker->attack,defenderHarm=defender->attack/2; 
@@ -677,15 +679,12 @@ void WarriorsBattle(Headquarter& a,Headquarter& b,int time){
 			}
 
 			defender->remainLifeElement-=attackerHarm;
-			defender->pastLifeElement-=attackerHarm;
 			printf("%03d:%02d %s %s %d attacked %s %s %d in city %d with %d elements and force %d\n",time/60,time%60,attacker->color.c_str(),warrior_names[attacker->type].c_str(),attacker->id,defender->color.c_str(),warrior_names[defender->type].c_str(),defender->id,attacker->position,attacker->remainLifeElement,attacker->attack);
 			if(defender->remainLifeElement<=0){
 				defender->alive=false;
-				defender->pastLifeElement+=attackerHarm;
 			}
 			if(defender->alive&&defender->type!=1){
 				attacker->remainLifeElement-=defenderHarm;
-				attacker->pastLifeElement-=defenderHarm;
 				for(auto& w:defender->weaponList){
 					if(w.type==0){
 						w.attribute=w.attribute*8/10;
@@ -701,7 +700,6 @@ void WarriorsBattle(Headquarter& a,Headquarter& b,int time){
 			}
 			if(attacker->remainLifeElement<=0){
 				attacker->alive=false;
-				attacker->pastLifeElement+=defenderHarm;
 			}
 
 			vector<Warrior*> temp;
@@ -720,10 +718,9 @@ void WarriorsBattle(Headquarter& a,Headquarter& b,int time){
 			if(defender->type==3) attacker->remainLifeElement+=defender->pastLifeElement;
 			attacker->changeMorale(0.2);
 			victoryWarriors.emplace_back(attacker,cityLifeElement[attacker->position]);
-			if(!defender->isShotDead) attacker->yell(time);
+			attacker->yell(time);
 			printf("%03d:%02d %s %s %d earned %d elements for his headquarter\n",time/60,time%60,attacker->color.c_str(),warrior_names[attacker->type].c_str(),attacker->id,cityLifeElement[attacker->position]);
 			cityLifeElement[attacker->position]=0;
-			if(cityFlag[attacker->position]!=0&&cityFlag[attacker->position]!=side+1) cityFlag[attacker->position]=0;
 			battleVictory[attacker->position][1-side]=0;
 			if(battleVictory[attacker->position][side]<2) battleVictory[attacker->position][side]++;
 			if(battleVictory[attacker->position][side]==2&&cityFlag[attacker->position]!=side+1){
@@ -738,12 +735,11 @@ void WarriorsBattle(Headquarter& a,Headquarter& b,int time){
 			victoryWarriors.emplace_back(defender,cityLifeElement[defender->position]);
 			printf("%03d:%02d %s %s %d earned %d elements for his headquarter\n",time/60,time%60,defender->color.c_str(),warrior_names[defender->type].c_str(),defender->id,cityLifeElement[defender->position]);
 			cityLifeElement[defender->position]=0;
-			if(cityFlag[defender->position]!=0&&cityFlag[defender->position]!=side+1) cityFlag[defender->position]=0;
 			battleVictory[defender->position][1-side]=0;
 			if(battleVictory[defender->position][side]<2) battleVictory[defender->position][side]++;
 			if(battleVictory[defender->position][side]==2&&cityFlag[defender->position]!=side+1){
 				cityFlag[defender->position]=side+1;
-				printf("%03d:%02d %s flag raised in city %d\n",time/60,time%60,attacker->color,attacker->position);
+				printf("%03d:%02d %s flag raised in city %d\n",time/60,time%60,defender->color.c_str(),attacker->position);
 			} 
 		}
 		if(result=="tie"){
@@ -752,6 +748,10 @@ void WarriorsBattle(Headquarter& a,Headquarter& b,int time){
 			attacker->decreaseLoyalty(k);
 			defender->decreaseLoyalty(k);
 			attacker->yell(time);
+		}
+		if(result=="not"){
+			attacker->decreaseLoyalty(k);
+			defender->decreaseLoyalty(k);
 		}
 		if(result=="tie"||result=="not"){
 			for(int i=0;i<2;i++) battleVictory[attacker->position][i]=0;
